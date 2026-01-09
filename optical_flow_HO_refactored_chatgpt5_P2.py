@@ -1,5 +1,8 @@
 # optical_flow_HO_refactored_chatgpt5_P2.py
 
+
+# Output folders: LOG_DIR: C:\Axis_code_projects\OF_vs_Step7\outputs\Step7_full\datestamped_name\log,videos,frames
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -84,29 +87,113 @@ os.environ["STD_PATHS_WATCHER"] = os.environ.get("STD_PATHS_WATCHER", "0")
 #    so coreModules_Eagle may not be importable. In that case we fall back to a tiny local
 #    path helper that creates: <output_root>/<MODULE>/<run_name>/{logs,frames,videos}
 
-def _now_stamp():
-    from datetime import datetime
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
+# def _now_stamp():
+    # from datetime import datetime
+    # return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# class _LocalStdPaths:
+    # def __init__(self):
+        # self._output_root = None
+
+    # def set_output_root(self, root: str):
+        # self._output_root = str(root)
+
+    # def get_paths(self, video_path: str, module_name: str):
+        # from pathlib import Path
+        # vp = Path(video_path)
+        # stem = vp.stem
+        # run_name = f"{stem}_{_now_stamp()}_{uuid.uuid4().hex[:4]}"
+        # out_root = Path(self._output_root) if self._output_root else Path.cwd() / "outputs"
+        # run_dir = out_root / module_name / run_name
+        # logs = run_dir / "logs"
+        # frames = run_dir / "frames"
+        # videos = run_dir / "videos"
+        # for d in (logs, frames, videos):
+            # d.mkdir(parents=True, exist_ok=True)
+        # return {
+            # "OUT_DIR": str(run_dir),
+            # "LOG_DIR": str(logs),
+            # "IMAGE_DIR": str(frames),  # historical key used in code
+            # "VIDEO_DIR": str(videos),
+            # "RUN_NAME": run_name,
+        # }
+
+# try:
+    # from coreModules_Eagle import std_paths_of as sp  # type: ignore
+# except Exception:
+    # sp = _LocalStdPaths()
+
+## 2) Optional outputs root via env (pick one name and stick to it)
+# _OF_ENV_ROOT = os.getenv("OF_OUTPUT_ROOT")  # optional override for outputs root
+# if _OF_ENV_ROOT:
+    # sp.set_output_root(_OF_ENV_ROOT)
+
+# #2b) Hard-coded output root for OF vs Step7 comparisons
+ ##    Forces all OF_HO outputs under: C:\Axis_code_projects\OF_vs_Step7\outputs\Step7_full\<run>\{logs,frames,videos}
+# _HARDCODED_OUTPUT_ROOT = r"C:\Axis_code_projects\OF_vs_Step7\outputs"
+# sp.set_output_root(_HARDCODED_OUTPUT_ROOT)
+
+# MODULE_NAME = "Step7_full"  # outputs aligned under Step7_full
+# SCRIPT_VERSION = "2.0"
 
 class _LocalStdPaths:
+    """
+    Local fallback when coreModules_Eagle.std_paths_of isn't available.
+
+    Folder structure:
+      <output_root>/<module_name>/<run_name>/{logs,frames,videos}
+    """
     def __init__(self):
         self._output_root = None
 
     def set_output_root(self, root: str):
         self._output_root = str(root)
 
+    # def get_paths(self, video_path: str, module_name: str):
+        # from pathlib import Path
+        # vp = Path(video_path)
+        # stem = vp.stem
+        # run_name = f"{stem}_{_now_stamp()}_{uuid.uuid4().hex[:4]}"
+
+        # out_root = Path(self._output_root) if self._output_root else (Path.cwd() / "outputs")
+        # run_dir = out_root / module_name / run_name
+
+        # logs = run_dir / "logs"
+        # frames = run_dir / "frames"
+        # videos = run_dir / "videos"
+
+        # for d in (logs, frames, videos):
+            # d.mkdir(parents=True, exist_ok=True)
+
+        # return {
+            # "OUT_DIR": str(run_dir),
+            # "LOG_DIR": str(logs),
+            # "IMAGE_DIR": str(frames),  # historical key used in code
+            # "VIDEO_DIR": str(videos),
+            # "RUN_NAME": run_name,
+        # }
+        
     def get_paths(self, video_path: str, module_name: str):
         from pathlib import Path
+        from datetime import datetime
+        import uuid
+
         vp = Path(video_path)
         stem = vp.stem
-        run_name = f"{stem}_{_now_stamp()}_{uuid.uuid4().hex[:4]}"
-        out_root = Path(self._output_root) if self._output_root else Path.cwd() / "outputs"
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_name = f"{stem}_{stamp}_{uuid.uuid4().hex[:4]}"
+
+        out_root = Path(self._output_root) if self._output_root else (Path.cwd() / "outputs")
         run_dir = out_root / module_name / run_name
+
         logs = run_dir / "logs"
         frames = run_dir / "frames"
         videos = run_dir / "videos"
+
         for d in (logs, frames, videos):
             d.mkdir(parents=True, exist_ok=True)
+
         return {
             "OUT_DIR": str(run_dir),
             "LOG_DIR": str(logs),
@@ -114,24 +201,78 @@ class _LocalStdPaths:
             "VIDEO_DIR": str(videos),
             "RUN_NAME": run_name,
         }
+        
+"""
+        
+packet_of_p1
 
+This is the motion signal right after Pass 1 segmentation.
+Think: “raw-ish OF motion decision before the fancy recovery logic”
+It reflects the strict/primary sensor stage (P1 kept frames → P1 segments)
+Useful for seeing what OF considers motion without P2’s “gap-fill / extension / rescue” behavior
+
+packet_of_final
+
+This is the motion signal after Pass 2 recovery + final segment rebuild.
+Think: “what OF will actually claim as the best coherent motion waveform”
+Includes:
+P2-added frames
+padding extension behavior
+any final segment merges / rebuild from md_final
+        
+Why both matter:
+If final beats Step7 but p1 doesn’t, you know the “win” came from P2 recovery, not from P1 detection strength. That’s exactly the kind of attribution you want for honest comparisons (no moving goalposts).  
+
+
+Step7: packet_step7_baseline vs packet_step7_retro
+
+packet_step7_baseline
+This is Step7’s best-track motion waveform before retro-interpolation.
+Observed frames only
+Gaps remain gaps
+Density reflects actual tracking stability
+
+Think: “what the tracker truly saw”
+
+packet_step7_retro
+
+This is Step7’s best-track waveform after retro-interpolation fills gaps.
+Same span, but gaps get replaced by interpolated positions/frames
+Density often jumps (sometimes to 1.0)
+It becomes a “smoothed / completed” waveform for plotting + downstream analysis
+
+Think: “what the tracker believes happened in the missing frames”
+
+Why both matter:
+Retro can make Step7 look “perfect” on paper even when the underlying detection was choppy. Baseline tells you the truth; Retro tells you the reconstructed signal.
+"""  
+
+# 1) Prefer core std_paths_of; fall back to local version if repo isn't present
 try:
     from coreModules_Eagle import std_paths_of as sp  # type: ignore
 except Exception:
     sp = _LocalStdPaths()
 
-# 2) Optional outputs root via env (pick one name and stick to it)
-_OF_ENV_ROOT = os.getenv("OF_OUTPUT_ROOT")  # optional override for outputs root
+# 2) Output root resolution (priority):
+#    env OF_OUTPUT_ROOT  >  hard-coded comparison root  >  std_paths default
+_HARDCODED_OUTPUT_ROOT = r"C:\Axis_code_projects\OF_vs_Step7\outputs"
+_OF_ENV_ROOT = os.getenv("OF_OUTPUT_ROOT")
+
 if _OF_ENV_ROOT:
     sp.set_output_root(_OF_ENV_ROOT)
+else:
+    sp.set_output_root(_HARDCODED_OUTPUT_ROOT)
 
-# 2b) Hard-coded output root for OF vs Step7 comparisons
-#     Forces all OF_HO outputs under: C:\Axis_code_projects\OF_vs_Step7\outputs\Step7_full\<run>\{logs,frames,videos}
-_HARDCODED_OUTPUT_ROOT = r"C:\Axis_code_projects\OF_vs_Step7\outputs"
-sp.set_output_root(_HARDCODED_OUTPUT_ROOT)
-
-MODULE_NAME = "Step7_full"  # outputs aligned under Step7_full
+# 3) IMPORTANT: module_name must identify THIS algorithm, not Step7.
+#    This is what creates: ...\outputs\OF_HO\<run>\{logs,frames,videos}
+MODULE_NAME = "OF_HO"
 SCRIPT_VERSION = "2.0"
+
+
+
+
+
+
 
 # ======================================================================================
 # INPUT CONFIG (HARD-CODED, FORGET-PROOF)
@@ -144,7 +285,7 @@ VIDEO_ROOT = Path(r"C:\AxisRecordings\Optical_Flow\videos")  # <-- always a fold
 INPUT_MODE = "single"   # "single" or "batch"
 
 # Used only if INPUT_MODE == "single"
-SINGLE_CLIP_NAME = "big_bird_R2L.mkv"  # file must exist inside VIDEO_ROOT
+SINGLE_CLIP_NAME = "big_bird_R2L.mkv"             #"0102_1400_2.mkv"               # file must exist inside VIDEO_ROOT
 
 # Extensions searched in batch mode (and validated in single mode)
 VIDEO_EXTS = (".mkv",)  # add ".mp4" if needed
@@ -204,7 +345,7 @@ AXIS_CREDS_PATH_DEFAULT = r"C:\All_api_keys\axis_q6155\axis_creds.json"
 # on the preset definitions (which are always used at runtime).
 
 # --- Water Mask (easy toggles) ---
-WATER_MASK_ENABLED   = True           # ← master on/off
+WATER_MASK_ENABLED   = True          # ← master on/off
 WATER_MASK_MODE      = "exclude"      # "exclude" or "include"
 WATER_MASK_DILATE_PX = 15
 WATER_SHIFT_X        = 0
@@ -1586,17 +1727,75 @@ def export_comparison_packet_of(
     # -------------------------
     # 1) run_manifest.json
     # -------------------------
+    # manifest = {
+        # "pipeline_name": "OF_HO_P2",
+        # "pipeline_version": str(SCRIPT_VERSION),
+        # "module": str(MODULE_NAME),
+        # "video_name": video_path.name,
+        # "video_path": str(video_path),
+        # "clip_info": {"fps": float(fps), "total_frames": int(total_frames), "w": int(frame_w), "h": int(frame_h)},
+        # "override_info": getattr(state, "override_info", None),
+        # "requested_preset": getattr(state, "requested_preset", None),
+        # "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        # "packet_version": "1.0",
+        # "primary_rule_id": "PR1",
+        # "primary_rule": "md_count>density>span>start",
+        # "primary_rule_notes": "Primary segment is chosen from packet-derived segments; prefer most MD frames, then stability, then size, then earliest start.",
+        # "segment_derivation_rule_id": "SD1",
+        # "segment_derivation_rule": "segments from md; merge gaps <= MERGE_GAP_FRAMES; drop segments with span < MIN_SEGMENT_LENGTH; compute md_count,density,gap_count,max_gap"      
+    # }
+    
     manifest = {
-        "pipeline_name": "OF_HO_P2",
-        "pipeline_version": str(SCRIPT_VERSION),
-        "module": str(MODULE_NAME),
-        "video_name": video_path.name,
-        "video_path": str(video_path),
-        "clip_info": {"fps": float(fps), "total_frames": int(total_frames), "w": int(frame_w), "h": int(frame_h)},
-        "override_info": getattr(state, "override_info", None),
-        "requested_preset": getattr(state, "requested_preset", None),
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
+    # identity
+    "algorithm": "OF_HO",
+    "pipeline_version": str(SCRIPT_VERSION),
+    "module": str(MODULE_NAME),
+
+    # packet identity (these matter for comparison)
+    "packet_version": "1.0",
+    "packet_id": "of_final",          # or "of_p1"
+    "packet_stage": "final",          # or "raw"
+
+    # video
+    "video_name": video_path.name,
+    "video_path": str(video_path),
+    "clip_info": {
+        "fps": float(fps),
+        "total_frames": int(total_frames),
+        "w": int(frame_w),
+        "h": int(frame_h),
+    },
+
+    # reproducibility
+    "override_info": getattr(state, "override_info", None),
+    "requested_preset": getattr(state, "requested_preset", None),
+    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+
+    # drift-proof rules
+    "primary_rule_id": "PR1",
+    "primary_rule": "md_count>density>span>start",
+    "primary_rule_notes": (
+        "Primary segment is chosen from packet-derived segments; "
+        "prefer most MD frames, then stability, then size, then earliest start."
+    ),
+
+    "segment_derivation_rule_id": "SD1",
+    "segment_derivation_rule": (
+        "segments from md; merge gaps <= MERGE_GAP_FRAMES; "
+        "drop segments with span < MIN_SEGMENT_LENGTH; "
+        "compute md_count,density,gap_count,max_gap"
+    ),
+
+    # crucial: record the *actual parameter values used*
+    "segment_params": {
+        "merge_gap_frames": int(config.MERGE_GAP_FRAMES),
+        "min_segment_length": int(config.MIN_SEGMENT_LENGTH),
+    },
+}
+
+    
+    
+    
     with (packet_dir / "run_manifest.json").open("w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
@@ -1726,6 +1925,303 @@ def export_comparison_packet_of(
 
 
 
+# ======================================================================================
+# COMPARISON PACKET EXPORT (OF P1 vs OF FINAL)
+# Writes Step7-compatible packet folders under the run directory so Step7 and OF can be
+# compared without moving goalposts.
+#
+# Output (under RUN_DIR):
+#   packet_of_p1/
+#     run_manifest.json
+#     frame_signal.csv
+#     segment_summary.csv
+#   packet_of_final/
+#     run_manifest.json
+#     frame_signal.csv
+#     segment_summary.csv
+# ======================================================================================
+
+def _read_csv_rows(path: Path) -> list:
+    if not path.exists():
+        return []
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f))
+
+def _safe_int(x, default=0):
+    try:
+        return int(float(x))
+    except Exception:
+        return default
+
+def _safe_float(x, default=0.0):
+    try:
+        return float(x)
+    except Exception:
+        return default
+
+def _md_set_from_rows(rows: list, key: str) -> set:
+    out = set()
+    for r in rows:
+        if _safe_int(r.get(key, 0), 0) == 1:
+            out.add(_safe_int(r.get("frame_idx", 0), 0))
+    return out
+
+def _segment_metrics(md_frames: set, start: int, end: int) -> dict:
+    if end < start:
+        start, end = end, start
+    span = (end - start + 1)
+    if span <= 0:
+        return {"start": start, "end": end, "span": 0, "md": 0, "density": 0.0,
+                "gap_frames": 0, "gap_sequences": 0, "longest_gap": 0}
+
+    md_count = 0
+    gap_frames = 0
+    gap_sequences = 0
+    longest_gap = 0
+
+    in_gap = False
+    cur_gap = 0
+
+    for fi in range(start, end + 1):
+        if fi in md_frames:
+            md_count += 1
+            if in_gap:
+                gap_sequences += 1
+                longest_gap = max(longest_gap, cur_gap)
+                in_gap = False
+                cur_gap = 0
+        else:
+            gap_frames += 1
+            in_gap = True
+            cur_gap += 1
+
+    if in_gap:
+        gap_sequences += 1
+        longest_gap = max(longest_gap, cur_gap)
+
+    dens = (md_count / span) if span else 0.0
+    return {
+        "start": start,
+        "end": end,
+        "span": span,
+        "md": md_count,
+        "density": dens,
+        "gap_frames": gap_frames,
+        "gap_sequences": gap_sequences,
+        "longest_gap": longest_gap,
+    }
+
+def _write_segment_summary(packet_dir: Path, segments: list, md_frames: set) -> dict:
+    packet_dir.mkdir(parents=True, exist_ok=True)
+    out_csv = packet_dir / "segment_summary.csv"
+
+    seg_rows = []
+    for i, (s, e) in enumerate(segments, 1):
+        m = _segment_metrics(md_frames, int(s), int(e))
+        seg_rows.append({
+            "segment_id": i,
+            "start_frame": m["start"],
+            "end_frame": m["end"],
+            "span": m["span"],
+            "md": m["md"],
+            "density": round(m["density"], 6),
+            "gap_frames": m["gap_frames"],
+            "gap_sequences": m["gap_sequences"],
+            "longest_gap": m["longest_gap"],
+        })
+
+    with open(out_csv, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(
+            f,
+            fieldnames=list(seg_rows[0].keys()) if seg_rows else
+            ["segment_id","start_frame","end_frame","span","md","density","gap_frames","gap_sequences","longest_gap"]
+        )
+        w.writeheader()
+        for r in seg_rows:
+            w.writerow(r)
+
+    primary = None
+    if seg_rows:
+        primary = max(seg_rows, key=lambda r: (int(r["span"]), int(r["md"])))
+
+    return {"segments": seg_rows, "primary": primary}
+
+def _write_frame_signal(packet_dir: Path, rows: list, md_key: str) -> dict:
+    """
+    Creates frame_signal.csv aligned to flow_p2_frame_log.csv (frame_idx rows).
+    Includes:
+      frame_idx, md, in_p1_span, in_p2_pad, active_raw_p2, flow_energy_p2, flow_energy_norm_p2
+    """
+    packet_dir.mkdir(parents=True, exist_ok=True)
+    out_csv = packet_dir / "frame_signal.csv"
+
+    fieldnames = [
+        "frame_idx",
+        "md",
+        "in_p1_span",
+        "in_p2_pad",
+        "active_raw_p2",
+        "flow_energy_p2",
+        "flow_energy_norm_p2",
+    ]
+    md_total = 0
+    with open(out_csv, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for r in rows:
+            fi = _safe_int(r.get("frame_idx", 0), 0)
+            md = 1 if _safe_int(r.get(md_key, 0), 0) == 1 else 0
+            md_total += md
+            w.writerow({
+                "frame_idx": fi,
+                "md": md,
+                "in_p1_span": _safe_int(r.get("in_p1_span", 0), 0),
+                "in_p2_pad": _safe_int(r.get("in_p2_pad", 0), 0),
+                "active_raw_p2": _safe_int(r.get("active_raw_p2", 0), 0),
+                "flow_energy_p2": _safe_float(r.get("flow_energy_p2", 0.0), 0.0),
+                "flow_energy_norm_p2": _safe_float(r.get("flow_energy_norm_p2", 0.0), 0.0),
+            })
+
+    return {"md_total": md_total, "frame_signal_csv": str(out_csv)}
+
+def _write_run_manifest(
+    packet_dir: Path,
+    *,
+    module: str,
+    variant: str,
+    video_path: str,
+    timestamp: str,
+    clip_info: dict,
+    knobs: dict,
+    overrides: dict,
+    seg_summary: dict,
+    md_total: int,
+) -> None:
+    packet_dir.mkdir(parents=True, exist_ok=True)
+    out_json = packet_dir / "run_manifest.json"
+
+    primary = seg_summary.get("primary") or {}
+    primary_span = (primary.get("start_frame"), primary.get("end_frame"))
+    primary_span = [int(primary_span[0]) if primary_span[0] is not None else 0,
+                    int(primary_span[1]) if primary_span[1] is not None else 0]
+    span = int(primary.get("span", 0) or 0)
+    dens = float(primary.get("density", 0.0) or 0.0)
+
+    payload = {
+        "module": module,
+        "variant": variant,  # "p1" or "final"
+        "video_name": Path(video_path).name,
+        "video_path": str(video_path),
+        "timestamp": timestamp,
+        "clip_info": clip_info,
+        "knobs": knobs,
+        "overrides": overrides,
+        "primary_span": primary_span,
+        "span": span,
+        "md_total": int(md_total),
+        "primary_density": dens,
+        "segments": seg_summary.get("segments", []),
+    }
+    with open(out_json, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+def export_comparison_packets_of(
+    *,
+    run_dir: Path,
+    log_dir: Path,
+    video_path: str,
+    fps: float,
+    total_frames: int,
+    frame_w: int,
+    frame_h: int,
+    p1_segments: list,
+    final_segments: list,
+) -> None:
+    """
+    Export two OF comparison packets under run_dir:
+      - packet_of_p1     (md derived from md_p1)
+      - packet_of_final  (md derived from md_final)
+
+    Uses flow_p2_frame_log.csv if present.
+    """
+    run_dir = Path(run_dir)
+    log_dir = Path(log_dir)
+
+    p2_log = log_dir / "flow_p2_frame_log.csv"
+    rows = _read_csv_rows(p2_log)
+
+    run_cfg_path = log_dir / "run_config.json"
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    clip_info = {"fps": float(fps), "total_frames": int(total_frames), "w": int(frame_w), "h": int(frame_h)}
+    knobs = {}
+    overrides = {}
+    module = MODULE_NAME
+    if run_cfg_path.exists():
+        try:
+            with open(run_cfg_path, "r", encoding="utf-8") as f:
+                rc = json.load(f)
+            now = rc.get("timestamp", now)
+            module = rc.get("module", module)
+            clip_info = rc.get("clip_info", clip_info) or clip_info
+            knobs = rc.get("knobs", {}) or {}
+            overrides = rc.get("overrides", {}) or {}
+        except Exception:
+            pass
+
+    # ---------------- packet_of_p1 ----------------
+    p1_dir = run_dir / "packet_of_p1"
+    md_total_p1 = 0
+    if rows:
+        fs = _write_frame_signal(p1_dir, rows, md_key="md_p1")
+        md_total_p1 = fs["md_total"]
+        md_frames_p1 = _md_set_from_rows(rows, "md_p1")
+    else:
+        md_frames_p1 = set()
+
+    seg_p1 = _write_segment_summary(p1_dir, p1_segments, md_frames_p1)
+    _write_run_manifest(
+        p1_dir,
+        module=module,
+        variant="p1",
+        video_path=video_path,
+        timestamp=now,
+        clip_info=clip_info,
+        knobs=knobs,
+        overrides=overrides,
+        seg_summary=seg_p1,
+        md_total=md_total_p1 if rows else len(md_frames_p1),
+    )
+
+    # ---------------- packet_of_final ----------------
+    final_dir = run_dir / "packet_of_final"
+    md_total_final = 0
+    if rows:
+        fs = _write_frame_signal(final_dir, rows, md_key="md_final")
+        md_total_final = fs["md_total"]
+        md_frames_final = _md_set_from_rows(rows, "md_final")
+    else:
+        md_frames_final = set()
+
+    seg_final = _write_segment_summary(final_dir, final_segments, md_frames_final)
+    _write_run_manifest(
+        final_dir,
+        module=module,
+        variant="final",
+        video_path=video_path,
+        timestamp=now,
+        clip_info=clip_info,
+        knobs=knobs,
+        overrides=overrides,
+        seg_summary=seg_final,
+        md_total=md_total_final if rows else len(md_frames_final),
+    )
+
+    print(
+        "   ✓ OF packets written:\n"
+        f"      • {p1_dir}  (variant=p1 md_total={md_total_p1})\n"
+        f"      • {final_dir} (variant=final md_total={md_total_final})"
+    )
 
 
 
@@ -1938,6 +2434,23 @@ def process_clip(video_path: Path, paths: Dict[str, str], config: Config, state:
             pfl.close()
         except Exception as e:
             print(f"   ⚠️ per-frame logger close error: {e}")
+            
+        # ---- Comparison packet export (OF) ----
+    try:
+        export_comparison_packets_of(
+            run_dir=Path(paths["LOG_DIR"]).parent,
+            log_dir=Path(paths["LOG_DIR"]),
+            video_path=str(video_path),
+            fps=float(fps),
+            total_frames=int(total_frames),
+            frame_w=int(frame_w),
+            frame_h=int(frame_h),
+            p1_segments=p1_segments,
+            final_segments=segments,
+        )
+    except Exception as e:
+        print(f"  ⚠️ packet export failed: {e}")
+
 
     print(f"    Processed {video_path.name}: {len(segments)} segment(s) in {duration:.2f}s")
 
