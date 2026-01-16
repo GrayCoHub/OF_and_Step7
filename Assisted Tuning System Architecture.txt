@@ -1,0 +1,74 @@
+┌──────────────────────────────────────────────┐
+│                FULL PIPELINE                 │
+│        (Ground‑Truth Segmentation Mode)       │
+└──────────────────────────────────────────────┘
+                │
+                ▼
+      [1] Motion Extraction Layer
+          - Optical flow (vectors, magnitude, direction)
+                │
+                ▼
+      [2] Motion Filtering Layer
+          - Water suppression
+          - Spatial masks
+          - Magnitude thresholding
+          - Produces: filtered motion mask
+                │
+                ▼
+      [3] Motion Component Layer
+          - Connected components in filtered mask
+          - Per‑frame motion components
+                │
+                ▼
+      [4] Tracklet Layer (Semantic Middle Layer)
+          - Associate components across frames
+          - Build short tracklets
+          - Tracklet features:
+              • centroids
+              • areas
+              • frame spans
+              • motion strength
+          - This layer is cached for fast tuning
+                │
+                │  (PRECOMPUTE MODE)
+                ▼
+┌──────────────────────────────────────────────┐
+│           TRACKLET CACHE (Stored)            │
+│   → ML‑ready semantic representation          │
+└──────────────────────────────────────────────┘
+                │
+                │  (FAST TUNING MODE)
+                ▼
+      [5] Temporal Semantics Layer (Refinement)
+          - P1 hard/soft gating
+              • tracklet validity
+              • centroid stability
+              • minimum length
+              • minimum area
+          - Produces: frame‑level activity map
+                │
+                ▼
+      [6] P2 Temporal Recovery Layer
+          - Hard/soft gap recovery
+          - Segment merging
+          - Optional padding
+          - Produces: refined segments
+                │
+                ▼
+      [7] Segmentation Layer
+          - MD/MT‑like segments
+          - MD totals, scores, metrics
+                │
+                ▼
+┌──────────────────────────────────────────────┐
+│         CONFIG SCORE OUTPUT (per run)        │
+└──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────┐
+│                ML TUNING LOOP                │
+│  - Explore config space (P1/P2 + knobs)      │
+│  - Evaluate via fast refinement path          │
+│  - Learn mapping: config → segmentation score │
+│  - Predict optimal settings for new clips     │
+└──────────────────────────────────────────────┘

@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-01-15 22:14:53",
+  "pointer_base": "_latest_packet_of_p1",
+  "packet_dir": "C:\\Axis_code_projects\\OF_vs_Step7\\outputs\\OF_HO\\1-smallObject-R2L-bankingTurn_L2R_20260115_221103_22e1\\packet_of_p1",
+  "run_dir": "C:\\Axis_code_projects\\OF_vs_Step7\\outputs\\OF_HO\\1-smallObject-R2L-bankingTurn_L2R_20260115_221103_22e1",
+  "video_name": "1-smallObject-R2L-bankingTurn_L2R.mkv",
+  "video_path": "C:\\AxisRecordings\\Optical_Flow\\videos\\1-smallObject-R2L-bankingTurn_L2R.mkv"
+}
